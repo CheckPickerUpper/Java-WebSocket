@@ -47,6 +47,7 @@ public class Issue900Test {
 
   CountDownLatch serverStartLatch = new CountDownLatch(1);
   CountDownLatch closeCalledLatch = new CountDownLatch(1);
+  CountDownLatch serverOpenLatch = new CountDownLatch(1);
 
   @Test
   @Timeout(2000)
@@ -74,6 +75,7 @@ public class Issue900Test {
     WebSocketServer server = new WebSocketServer(new InetSocketAddress(port)) {
       @Override
       public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        serverOpenLatch.countDown();
       }
 
       @Override
@@ -99,6 +101,7 @@ public class Issue900Test {
     new Thread(server).start();
     serverStartLatch.await();
     client.connectBlocking();
+    serverOpenLatch.await();
     WebSocketImpl websocketImpl = (WebSocketImpl) new ArrayList<WebSocket>(server.getConnections())
         .get(0);
     websocketImpl.setChannel(new ExceptionThrowingByteChannel());
