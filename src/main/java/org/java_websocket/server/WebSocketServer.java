@@ -585,6 +585,11 @@ public abstract class WebSocketServer extends AbstractWebSocket implements Runna
     try {
       if (SocketChannelIOHelper.batch(conn, conn.getChannel()) && key.isValid()) {
         key.interestOps(SelectionKey.OP_READ);
+        // A worker thread can queue data and request OP_WRITE between batch() and the line
+        // above, so check the queue again after removing OP_WRITE.
+        if (conn.hasBufferedData()) {
+          key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+        }
       }
     } catch (IOException e) {
       throw new WrappedIOException(conn, e);
