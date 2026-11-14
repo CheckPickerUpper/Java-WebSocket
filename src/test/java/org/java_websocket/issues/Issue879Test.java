@@ -60,9 +60,11 @@ public class Issue879Test {
   public void QuickStopTest(int numberOfConnections) throws InterruptedException, URISyntaxException {
     final boolean[] wasBindException = {false};
     final boolean[] wasConcurrentException = new boolean[1];
-    final CountDownLatch countDownLatch = new CountDownLatch(1);
 
     class SimpleServer extends WebSocketServer {
+
+      // Counts down once the server has bound its port, or has failed to start.
+      final CountDownLatch startedOrFailed = new CountDownLatch(1);
 
       public SimpleServer(InetSocketAddress address) {
         super(address);
@@ -94,18 +96,23 @@ public class Issue879Test {
         if (ex instanceof ConcurrentModificationException) {
           wasConcurrentException[0] = true;
         }
+        if (conn == null) {
+          startedOrFailed.countDown();
+        }
       }
 
       @Override
       public void onStart() {
-        countDownLatch.countDown();
+        startedOrFailed.countDown();
       }
     }
     int port = SocketUtil.getAvailablePort();
     SimpleServer serverA = new SimpleServer(new InetSocketAddress(port));
     SimpleServer serverB = new SimpleServer(new InetSocketAddress(port));
+    serverA.setReuseAddr(true);
+    serverB.setReuseAddr(true);
     serverA.start();
-    countDownLatch.await();
+    serverA.startedOrFailed.await();
     List<WebSocketClient> clients = startNewConnections(numberOfConnections, port);
     Thread.sleep(100);
     int numberOfConnected = 0;
@@ -119,9 +126,11 @@ public class Issue879Test {
 
     serverA.stop();
     serverB.start();
+    serverB.startedOrFailed.await();
     clients.clear();
     assertFalse(wasBindException[0], "There was a BindException");
     assertFalse(wasConcurrentException[0], "There was a ConcurrentModificationException");
+    serverB.stop();
   }
 
   public static Collection<Integer[]> data() {
