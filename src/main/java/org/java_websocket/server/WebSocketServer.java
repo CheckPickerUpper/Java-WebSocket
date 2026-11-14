@@ -658,6 +658,7 @@ public abstract class WebSocketServer extends AbstractWebSocket implements Runna
       }
     }
     if (selector != null) {
+      closeRemainingConnections();
       try {
         selector.close();
       } catch (IOException e) {
@@ -672,6 +673,23 @@ public abstract class WebSocketServer extends AbstractWebSocket implements Runna
         log.error("IOException during server.close", e);
         onError(null, e);
       }
+    }
+  }
+
+  /**
+   * Closes every connection that is still open once the selector thread has ended. stop() only
+   * queues a close frame on each connection, and a connection closes its channel after that frame
+   * is written, so a connection whose close frame was not written would otherwise stay open with
+   * nothing left to read from or write to it.
+   */
+  private void closeRemainingConnections() {
+    List<WebSocket> remaining;
+    synchronized (connections) {
+      remaining = new ArrayList<>(connections);
+    }
+    for (WebSocket ws : remaining) {
+      ws.closeConnection(CloseFrame.ABNORMAL_CLOSE,
+          "The server stopped before the close handshake completed");
     }
   }
 

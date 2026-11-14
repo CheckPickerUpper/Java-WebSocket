@@ -28,19 +28,25 @@ package org.java_websocket.server;
 
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import org.java_websocket.WebSocket;
 import org.java_websocket.drafts.Draft;
 import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.handshake.ClientHandshake;
+import org.java_websocket.util.Charsetfunctions;
 import org.java_websocket.util.SocketUtil;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -236,6 +242,67 @@ public class WebSocketServerTest {
     public void onStart() {
       if (serverLatch != null) {
         serverLatch.countDown();
+      }
+    }
+  }
+
+  @Test
+  @Timeout(30)
+  public void testStopClosesConnectionWhoseCloseFrameWasNotWritten() throws Exception {
+    int port = SocketUtil.getAvailablePort();
+    final CountDownLatch serverStarted = new CountDownLatch(1);
+    final CountDownLatch serverOpened = new CountDownLatch(1);
+    final AtomicReference<WebSocket> serverConnection = new AtomicReference<>();
+    WebSocketServer server = new WebSocketServer(new InetSocketAddress(port)) {
+      @Override
+      public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        serverConnection.set(conn);
+        serverOpened.countDown();
+      }
+
+      @Override
+      public void onClose(WebSocket conn, int code, String reason, boolean remote) {
+      }
+
+      @Override
+      public void onMessage(WebSocket conn, String message) {
+      }
+
+      @Override
+      public void onError(WebSocket conn, Exception ex) {
+      }
+
+      @Override
+      public void onStart() {
+        serverStarted.countDown();
+      }
+    };
+    server.start();
+    serverStarted.await();
+    try (Socket client = new Socket()) {
+      // The client reads nothing until the server has stopped, and its small receive buffer keeps
+      // the server from writing more than a few megabytes of the message below, so the server's
+      // close frame stays queued behind the rest of the message.
+      client.setReceiveBufferSize(4096);
+      client.connect(new InetSocketAddress("localhost", port));
+      client.getOutputStream().write(Charsetfunctions.asciiBytes("GET / HTTP/1.1\r\n"
+          + "Host: localhost:" + port + "\r\n"
+          + "Upgrade: websocket\r\n"
+          + "Connection: Upgrade\r\n"
+          + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+          + "Sec-WebSocket-Version: 13\r\n\r\n"));
+      serverOpened.await();
+      serverConnection.get().send(ByteBuffer.allocate(32 * 1024 * 1024));
+      server.stop();
+      client.setSoTimeout(5000);
+      InputStream in = client.getInputStream();
+      byte[] buffer = new byte[64 * 1024];
+      try {
+        while (in.read(buffer) != -1) {
+          // read what the server wrote before it stopped, until the server closes the connection
+        }
+      } catch (SocketTimeoutException e) {
+        fail("the server stopped but left the connection open");
       }
     }
   }
