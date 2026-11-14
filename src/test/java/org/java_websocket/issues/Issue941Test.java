@@ -46,6 +46,7 @@ public class Issue941Test {
 
   private CountDownLatch pingLatch = new CountDownLatch(1);
   private CountDownLatch pongLatch = new CountDownLatch(1);
+  private CountDownLatch serverStartLatch = new CountDownLatch(1);
   private byte[] pingBuffer, receivedPingBuffer, pongBuffer;
 
   @Test
@@ -102,6 +103,7 @@ public class Issue941Test {
 
       @Override
       public void onStart() {
+        serverStartLatch.countDown();
       }
 
       @Override
@@ -113,6 +115,7 @@ public class Issue941Test {
     };
 
     server.start();
+    serverStartLatch.await();
     client.connectBlocking();
     client.setConnectionLostTimeout(1);
     pingLatch.await();
