@@ -2,8 +2,11 @@ package org.java_websocket.client;
 
 import java.io.IOException;
 import java.net.*;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.*;
@@ -23,20 +26,23 @@ public class ConnectBlockingTest {
     public void test_ConnectBlockingCleanup() throws Throwable {
 
         Set<Thread> threadSet1 = Thread.getAllStackTraces().keySet();
-        final CountDownLatch ready = new CountDownLatch(1);
         final CountDownLatch accepted = new CountDownLatch(1);
 
         final int port = SocketUtil.getAvailablePort();
+
+        // Keep both server sockets referenced until the end of the test: a garbage collection
+        // closes an unreachable socket, and the client would then fail on the closed connection
+        // instead of timing out.
+        final ServerSocket serverSocket = new ServerSocket(port);
+        serverSocket.setReuseAddress(true);
+        final AtomicReference<Socket> clientSocket = new AtomicReference<>();
 
         /* TCP server which listens to a port, but does not answer handshake */
         Thread server = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    ServerSocket serverSocket = new ServerSocket(port);
-                    serverSocket.setReuseAddress(true);
-                    ready.countDown();
-                    Socket clientSocket = serverSocket.accept();
+                    clientSocket.set(serverSocket.accept());
                     accepted.countDown();
                 } catch (Throwable t) {
                     assertInstanceOf(InterruptedException.class, t);
@@ -44,7 +50,6 @@ public class ConnectBlockingTest {
             }
         });
         server.start();
-        ready.await();
 
         WebSocketClient client = new WebSocketClient(URI.create("ws://localhost:" + port)) {
             @Override
@@ -71,8 +76,11 @@ public class ConnectBlockingTest {
         server.interrupt();
         server.join();
 
-        Set<Thread> threadSet2 = Thread.getAllStackTraces().keySet();
-        assertEquals(threadSet1, threadSet2, "no threads left over");
+        Set<Thread> threadSet2 = new HashSet<>(Thread.getAllStackTraces().keySet());
+        threadSet2.removeAll(threadSet1);
+        assertEquals(Collections.emptySet(), threadSet2, "no threads left over");
         assertTrue(client.getReadyState() == ReadyState.CLOSED || client.getReadyState() == ReadyState.NOT_YET_CONNECTED, "WebSocket is in closed state");
+        clientSocket.get().close();
+        serverSocket.close();
     }
 }
