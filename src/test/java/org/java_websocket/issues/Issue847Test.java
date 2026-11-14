@@ -70,16 +70,17 @@ public class Issue847Test {
   @BeforeAll
   public static void startServer() throws Exception {
     port = SocketUtil.getAvailablePort();
+    final ServerSocket socket = new ServerSocket(port);
+    socket.setReuseAddress(true);
+    serverSocket = socket;
     thread = new Thread(
         new Runnable() {
           public void run() {
             try {
-              serverSocket = new ServerSocket(port);
-              serverSocket.setReuseAddress(true);
-              while (true) {
+              while (!socket.isClosed()) {
                 Socket client = null;
                 try {
-                  client = serverSocket.accept();
+                  client = socket.accept();
                   Scanner in = new Scanner(client.getInputStream());
                   String input;
                   String seckey = "";
@@ -134,9 +135,10 @@ public class Issue847Test {
   }
 
   @AfterAll
-  public static void successTests() throws IOException {
+  public static void successTests() throws IOException, InterruptedException {
     serverSocket.close();
     thread.interrupt();
+    thread.join();
   }
 
   @ParameterizedTest()
