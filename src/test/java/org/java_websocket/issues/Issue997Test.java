@@ -135,7 +135,12 @@ public class Issue997Test {
         }
         server.start();
         countServerDownLatch.await();
-        client.connectBlocking(1, TimeUnit.SECONDS);
+        client.connect();
+        // connectBlocking can return on onClose before onError has reported the SSLHandshakeException
+        assertTrue(client.outcome.await(10, TimeUnit.SECONDS),
+                "client neither opened nor caught a SSLHandshakeException");
+        client.closeBlocking();
+        server.stop();
         return client;
     }
 
@@ -143,8 +148,9 @@ public class Issue997Test {
     private static class SSLWebSocketClient extends WebSocketClient {
 
         private final String endpointIdentificationAlgorithm;
-        public boolean onSSLError = false;
-        public boolean onOpen = false;
+        private final CountDownLatch outcome = new CountDownLatch(1);
+        public volatile boolean onSSLError = false;
+        public volatile boolean onOpen = false;
 
         public SSLWebSocketClient(String address, int port, String endpointIdentificationAlgorithm)
                 throws URISyntaxException {
@@ -155,6 +161,7 @@ public class Issue997Test {
         @Override
         public void onOpen(ServerHandshake handshakedata) {
             this.onOpen = true;
+            outcome.countDown();
         }
 
         @Override
@@ -169,6 +176,7 @@ public class Issue997Test {
         public void onError(Exception ex) {
             if (ex instanceof SSLHandshakeException) {
                 this.onSSLError = true;
+                outcome.countDown();
             }
         }
 

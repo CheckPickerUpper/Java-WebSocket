@@ -101,7 +101,7 @@ public class CustomSSLWebSocketServerFactoryTest {
     channel.close();
     webSocketServerFactory = new CustomSSLWebSocketServerFactory(SSLContext.getDefault(),
         new String[]{"TLSv1.2"},
-        new String[]{"TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"});
+        new String[]{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"});
     channel = SocketChannel.open();
     try {
       ByteChannel result = webSocketServerFactory.wrapChannel(channel, null);
