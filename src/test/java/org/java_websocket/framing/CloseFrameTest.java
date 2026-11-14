@@ -25,6 +25,7 @@
 
 package org.java_websocket.framing;
 
+import java.nio.ByteBuffer;
 import org.java_websocket.enums.Opcode;
 import org.java_websocket.exceptions.InvalidDataException;
 import org.junit.jupiter.api.Test;
@@ -242,5 +243,13 @@ public class CloseFrameTest {
         } catch (InvalidDataException e) {
             //fine
         }
+    }
+
+    @Test
+    public void testIsValidWithInvalidUtf8Reason() {
+        CloseFrame frame = new CloseFrame();
+        frame.setPayload(ByteBuffer.wrap(new byte[]{0x03, (byte) 0xE8, (byte) 0xFF, (byte) 0xFE}));
+        InvalidDataException exception = assertThrows(InvalidDataException.class, frame::isValid);
+        assertEquals(CloseFrame.NO_UTF8, exception.getCloseCode(), "Close code must be NO_UTF8");
     }
 }

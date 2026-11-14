@@ -265,7 +265,7 @@ public class CloseFrame extends ControlFrame {
         validateUtf8(payload, mark);
       } catch (InvalidDataException e) {
         code = CloseFrame.NO_UTF8;
-        reason = null;
+        reason = "";
       }
     }
   }
