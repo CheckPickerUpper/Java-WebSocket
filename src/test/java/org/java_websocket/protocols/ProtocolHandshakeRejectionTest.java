@@ -57,17 +57,18 @@ public class ProtocolHandshakeRejectionTest {
 
     private int port = -1;
 
-    public void startServer() throws InterruptedException {
+    public void startServer() throws InterruptedException, IOException {
         port = SocketUtil.getAvailablePort();
+        ServerSocket socket = new ServerSocket(port);
+        socket.setReuseAddress(true);
+        serverSocket = socket;
         thread = new Thread(
                 () -> {
                     try {
-                        serverSocket = new ServerSocket(port);
-                        serverSocket.setReuseAddress(true);
-                        while (true) {
+                        while (!socket.isClosed()) {
                             Socket client = null;
                             try {
-                                client = serverSocket.accept();
+                                client = socket.accept();
                                 Scanner in = new Scanner(client.getInputStream());
                                 if (!in.hasNextLine()) {
                                     continue;
@@ -265,12 +266,13 @@ public class ProtocolHandshakeRejectionTest {
     }
 
     @AfterEach
-    public void successTests() throws IOException {
+    public void successTests() throws IOException, InterruptedException {
         if (serverSocket != null) {
             serverSocket.close();
         }
         if (thread != null) {
             thread.interrupt();
+            thread.join();
         }
     }
 

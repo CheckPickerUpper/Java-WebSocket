@@ -51,17 +51,18 @@ public class OpeningHandshakeRejectionTest {
 
     private static final String additionalHandshake = "Upgrade: websocket\r\nConnection: Upgrade\r\n\r\n";
 
-    public void startServer() throws InterruptedException {
+    public void startServer() throws InterruptedException, IOException {
         this.port = SocketUtil.getAvailablePort();
+        ServerSocket socket = new ServerSocket(port);
+        socket.setReuseAddress(true);
+        serverSocket = socket;
         this.thread = new Thread(
                 () -> {
                     try {
-                        serverSocket = new ServerSocket(port);
-                        serverSocket.setReuseAddress(true);
-                        while (true) {
+                        while (!socket.isClosed()) {
                             Socket client = null;
                             try {
-                                client = serverSocket.accept();
+                                client = socket.accept();
                                 Scanner in = new Scanner(client.getInputStream());
                                 if (!in.hasNextLine()) {
                                     continue;
@@ -141,12 +142,13 @@ public class OpeningHandshakeRejectionTest {
     }
 
     @AfterEach
-    public void cleanUp() throws IOException {
+    public void cleanUp() throws IOException, InterruptedException {
         if (serverSocket != null) {
             serverSocket.close();
         }
         if (thread != null) {
             thread.interrupt();
+            thread.join();
         }
     }
 
